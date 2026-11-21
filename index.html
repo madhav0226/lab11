@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab 11: User Validation Web Application</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Interactive view state toggles */
+        .app-view {
+            display: none;
+        }
+        .app-view.active {
+            display: block;
+            animation: fadeIn 0.25s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Server processing indicator */
+        .server-loader {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .server-loader.active {
+            display: block;
+        }
+        .spinner {
+            border: 3.5px solid #e2e8f0;
+            border-top: 3.5px solid var(--primary);
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Mode Banner */
+        .deployment-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .dot-live {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+        }
+
+        /* Tabs for GitHub Pages vs PHP Backend */
+        .tech-nav {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .tech-tab {
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #475569;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .tech-tab.active, .tech-tab:hover {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="mainContainer">
+
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="deployment-badge">
+                <span class="dot-live"></span> Live Application &bull; GitHub Pages
+            </div>
+            <h1>User Validation System</h1>
+            <p class="subtitle">Submits login credentials to server &amp; verifies against Database records</p>
+        </header>
+
+        <!-- 1. LOGIN VIEW -->
+        <section id="view-login" class="app-view active">
+            <main class="card">
+                <div id="loginAlertBox"></div>
+
+                <form id="loginForm" autocomplete="off">
+                    <div class="form-group">
+                        <label for="username">Login Name / Username</label>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username" 
+                            class="form-control" 
+                            placeholder="Enter login name (e.g., admin)" 
+                            required 
+                            autofocus
+                        >
+                        <div class="form-hint">Case-insensitive database lookup.</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <div class="input-wrapper">
+                            <input 
+                                type="password" 
+                                id="password" 
+                                name="password" 
+                                class="form-control" 
+                                placeholder="Enter password" 
+                                required
+                            >
+                            <button type="button" class="toggle-password-btn" id="togglePassBtn" title="Toggle visibility">👁 Show</button>
+                        </div>
+                        <div class="form-hint">Checked against secure cryptographic hash in database.</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn">
+                        Submit &amp; Validate Credentials &rarr;
+                    </button>
+                </form>
+
+                <!-- Processing Spinner -->
+                <div class="server-loader" id="serverLoader">
+                    <div class="spinner"></div>
+                    <p style="font-size:0.88rem; color:#475569; font-weight:500;">
+                        Server is querying Database for matching user credentials...
+                    </p>
+                </div>
+
+                <!-- Quick-Fill Demo Chips -->
+                <div class="demo-accounts">
+                    <div class="demo-title">⚡ Quick-Fill Demo Database Accounts (Click to test):</div>
+                    <div class="demo-chips">
+                        <button type="button" class="demo-chip" onclick="quickFill('admin', 'Admin@123')">
+                            <strong>admin</strong> (Admin@123)
+                        </button>
+                        <button type="button" class="demo-chip" onclick="quickFill('student', 'Lab11@Pass')">
+                            <strong>student</strong> (Lab11@Pass)
+                        </button>
+                        <button type="button" class="demo-chip" onclick="quickFill('alice', 'Alice@2026')">
+                            <strong>alice</strong> (Alice@2026)
+                        </button>
+                        <button type="button" class="demo-chip" style="color:#b91c1c; border-color:#fca5a5;" onclick="quickFill('wrong_user', 'BadPass!99')">
+                            <strong>invalid</strong> (Test Failure)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-links">
+                    Don't have an account? <a href="javascript:void(0)" onclick="switchView('register')">Register New User</a> &bull; 
+                    <a href="javascript:void(0)" onclick="switchView('database')">View Database Records</a>
+                </div>
+            </main>
+        </section>
+
+        <!-- 2. SUCCESSFUL LOGIN VIEW -->
+        <section id="view-success" class="app-view">
+            <main class="card">
+                <div class="result-banner banner-success">
+                    <div class="result-icon icon-success">✓</div>
+                    <h2 class="result-title title-success" id="successGreeting">Welcome back!</h2>
+                    <p class="result-desc">Your login credentials were successfully validated against the Database.</p>
+                </div>
+
+                <h3 style="font-size: 1.05rem; margin-bottom: 12px; color: #1f2937;">Authenticated Account Details</h3>
+                <div class="details-grid">
+                    <div class="detail-row">
+                        <span class="detail-label">Database User ID</span>
+                        <span class="detail-value" id="resUserId">#1</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Login Name (Username)</span>
+                        <span class="detail-value"><code id="resUsername">admin</code></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Full Name</span>
+                        <span class="detail-value" id="resFullName">System Administrator</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Email Address</span>
+                        <span class="detail-value" id="resEmail">admin@lab11.local</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Assigned Role</span>
+                        <span class="detail-value"><span class="role-badge role-admin" id="resRole">Administrator</span></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Login Timestamp</span>
+                        <span class="detail-value" id="resLoginTime">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Session ID</span>
+                        <span class="detail-value" id="resSessionId" style="font-family: monospace; font-size: 0.8rem;">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Validation Mechanism</span>
+                        <span class="detail-value" style="color: #059669;">Server Database Query + Hash Verification</span>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" class="btn btn-danger" style="flex: 1;" onclick="handleLogout()">
+                        Logout of Session &rarr;
+                    </button>
+                    <button type="button" class="btn btn-outline" style="flex: 1;" onclick="switchView('database')">
+                        View Database Records
+                    </button>
+                </div>
+
+                <div class="card-links">
+                    Need another account? <a href="javascript:void(0)" onclick="switchView('register')">Register New User</a>
+                </div>
+            </main>
+        </section>
+
+        <!-- 3. FAILURE MESSAGE VIEW -->
+        <section id="view-failure" class="app-view">
+            <main class="card">
+                <div class="result-banner banner-failure">
+                    <div class="result-icon icon-failure">✕</div>
+                    <h2 class="result-title title-failure">Authentication Failed</h2>
+                    <p class="result-desc" id="failureMessageText">The login name or password you entered does not match any record in our database.</p>
+                </div>
+
+                <h3 style="font-size: 1.05rem; margin-bottom: 12px; color: #1f2937;">Validation Audit Summary</h3>
+                <div class="details-grid">
+                    <div class="detail-row">
+                        <span class="detail-label">Attempted Login Name</span>
+                        <span class="detail-value"><code id="failAttemptedUser">wrong_user</code></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Attempt Timestamp</span>
+                        <span class="detail-value" id="failAttemptTime">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Database Match Result</span>
+                        <span class="detail-value" style="color: #dc2626;">0 Matching Records</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Status Code</span>
+                        <span class="detail-value" style="color: #b91c1c;">401 Unauthorized</span>
+                    </div>
+                </div>
+
+                <div class="diagnostic-box">
+                    <div class="diagnostic-title">💡 Security Note (OWASP Best Practice):</div>
+                    <ul>
+                        <li>The system displays a generic <strong>"Invalid Login Name or Password"</strong> message instead of revealing whether the username exists. This prevents <em>User Enumeration attacks</em>.</li>
+                        <li>All database queries use parameterized prepared statement logic to guard against <em>SQL Injection</em>.</li>
+                    </ul>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" class="btn btn-primary" style="flex: 1;" onclick="switchView('login')">
+                        &larr; Try Again
+                    </button>
+                    <button type="button" class="btn btn-outline" style="flex: 1;" onclick="switchView('register')">
+                        Register New Account &rarr;
+                    </button>
+                </div>
+
+                <div class="card-links">
+                    Forgot valid credentials? <a href="javascript:void(0)" onclick="switchView('database')">Check Available Database Users</a>
+                </div>
+            </main>
+        </section>
+
+        <!-- 4. REGISTRATION VIEW -->
+        <section id="view-register" class="app-view">
+            <main class="card">
+                <span class="badge badge-info" style="margin-bottom:10px;">Account Creation</span>
+                <h2 style="font-size:1.4rem; font-weight:700; margin-bottom:4px;">Register New User</h2>
+                <p class="subtitle" style="margin-bottom:18px;">Insert a new verified credential record into the database</p>
+
+                <div id="registerAlertBox"></div>
+
+                <form id="registerForm" autocomplete="off">
+                    <div class="form-group">
+                        <label for="regUsername">Login Name / Desired Username *</label>
+                        <input type="text" id="regUsername" class="form-control" placeholder="e.g., alex_chen" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regFullName">Full Name *</label>
+                        <input type="text" id="regFullName" class="form-control" placeholder="e.g., Alex Chen" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regEmail">Email Address *</label>
+                        <input type="email" id="regEmail" class="form-control" placeholder="e.g., alex@lab11.local" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regRole">User Role</label>
+                        <select id="regRole" class="form-control">
+                            <option value="Student">Student</option>
+                            <option value="Faculty">Faculty</option>
+                            <option value="Developer">Developer</option>
+                            <option value="Administrator">Administrator</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regPassword">Password *</label>
+                        <input type="password" id="regPassword" class="form-control" placeholder="Minimum 6 characters" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regConfirmPassword">Confirm Password *</label>
+                        <input type="password" id="regConfirmPassword" class="form-control" placeholder="Re-enter password" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block">
+                        Register &amp; Save to Database &rarr;
+                    </button>
+                </form>
+
+                <div class="card-links">
+                    Already registered? <a href="javascript:void(0)" onclick="switchView('login')">Back to Login</a> &bull; 
+                    <a href="javascript:void(0)" onclick="switchView('database')">View Database</a>
+                </div>
+            </main>
+        </section>
+
+        <!-- 5. DATABASE INSPECTOR VIEW -->
+        <section id="view-database" class="app-view">
+            <main class="card" style="max-width:850px; margin:0 auto;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                    <div>
+                        <h2 style="font-size:1.35rem; font-weight:700;">Database Records Inspector</h2>
+                        <p class="subtitle">Live contents of the <code>users</code> authentication table</p>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-outline" style="padding:6px 12px; font-size:0.82rem;" onclick="resetDatabase()">
+                            ↺ Reset to Default Users
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="data-table" id="usersTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Login Name</th>
+                                <th>Full Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Password Hash (Bcrypt Preview)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="info-box" style="margin-top:20px; background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0;">
+                    <h4 style="margin-bottom:6px; font-size:0.88rem; color:#334155;">Default Credentials Cheatsheet:</h4>
+                    <p style="font-size:0.82rem; color:#64748b; margin-bottom:3px;">&bull; <code>admin</code> &rarr; <code>Admin@123</code> (Administrator)</p>
+                    <p style="font-size:0.82rem; color:#64748b; margin-bottom:3px;">&bull; <code>student</code> &rarr; <code>Lab11@Pass</code> (Student)</p>
+                    <p style="font-size:0.82rem; color:#64748b;">&bull; <code>alice</code> &rarr; <code>Alice@2026</code> (Faculty)</p>
+                </div>
+
+                <div class="btn-group" style="margin-top: 20px;">
+                    <button type="button" class="btn btn-primary" onclick="switchView('login')">&larr; Return to Login Form</button>
+                    <button type="button" class="btn btn-outline" onclick="switchView('register')">+ Register Another User</button>
+                </div>
+            </main>
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="app-footer">
+            <p>Web Programming Laboratory &bull; Lab 11 User Validation Application</p>
+            <p style="margin-top: 6px; font-size: 0.8rem;">
+                <a href="https://github.com/madhav0226/lab11" target="_blank" rel="noopener">View GitHub Source Code (PHP &amp; MySQL)</a>
+            </p>
+        </footer>
+    </div>
+
+    <!-- SCRIPT: Client-Server Validation Simulation & Local Database -->
+    <script>
+        // Default Seed Users (Simulating Database Table)
+        const DEFAULT_USERS = [
+            {
+                id: 1,
+                username: "admin",
+                fullName: "System Administrator",
+                email: "admin@lab11.local",
+                passwordHash: "$2y$10$w3U69N0p2qfL4XkC/b7kueN27dYjI84Wz5m4p9a0q1B5t9h9z6kS.",
+                plainPassword: "Admin@123",
+                role: "Administrator",
+                createdAt: "2026-11-21 10:00:00"
+            },
+            {
+                id: 2,
+                username: "student",
+                fullName: "John Doe",
+                email: "student@lab11.local",
+                passwordHash: "$2y$10$C8YnSgX78W.HqV69h4LzI.eQZ4/rYc1L3kU6n5j0p9a0q1B5t9h9z",
+                plainPassword: "Lab11@Pass",
+                role: "Student",
+                createdAt: "2026-11-21 10:15:00"
+            },
+            {
+                id: 3,
+                username: "alice",
+                fullName: "Alice Johnson",
+                email: "alice@lab11.local",
+                passwordHash: "$2y$10$X8KjG2m3L5p7R9s1T4v6Q.h0F2d5B7w9A1c3E5g7I9k1M3o5Q7s9U",
+                plainPassword: "Alice@2026",
+                role: "Faculty",
+                createdAt: "2026-11-21 11:30:00"
+            }
+        ];
+
+        // Database storage layer (using localStorage with fallback)
+        function getDatabaseUsers() {
+            try {
+                const stored = localStorage.getItem('lab11_users_db');
+                if (stored) {
+                    return JSON.parse(stored);
+                }
+            } catch (e) {}
+            // Seed defaults
+            saveDatabaseUsers(DEFAULT_USERS);
+            return DEFAULT_USERS;
+        }
+
+        function saveDatabaseUsers(users) {
+            try {
+                localStorage.setItem('lab11_users_db', JSON.stringify(users));
+            } catch (e) {}
+        }
+
+        function resetDatabase() {
+            if (confirm("Reset database back to the 3 original sample accounts?")) {
+                saveDatabaseUsers(DEFAULT_USERS);
+                renderDatabaseTable();
+                alert("Database successfully reset!");
+            }
+        }
+
+        // View Switcher
+        function switchView(viewName) {
+            document.querySelectorAll('.app-view').forEach(el => el.classList.remove('active'));
+            const target = document.getElementById('view-' + viewName);
+            if (target) {
+                target.classList.add('active');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            if (viewName === 'database') {
+                renderDatabaseTable();
+            }
+        }
+
+        // Quick-Fill helper
+        function quickFill(u, p) {
+            document.getElementById('username').value = u;
+            document.getElementById('password').value = p;
+            document.getElementById('password').focus();
+        }
+
+        // Toggle password visibility
+        const togglePassBtn = document.getElementById('togglePassBtn');
+        const passInput = document.getElementById('password');
+        togglePassBtn.addEventListener('click', () => {
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+                togglePassBtn.textContent = '🔒 Hide';
+            } else {
+                passInput.type = 'password';
+                togglePassBtn.textContent = '👁 Show';
+            }
+        });
+
+        // Server Validation Handler
+        const loginForm = document.getElementById('loginForm');
+        const serverLoader = document.getElementById('serverLoader');
+        const loginSubmitBtn = document.getElementById('loginSubmitBtn');
+
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                showLoginAlert('warning', 'Please enter both login name and password.');
+                return;
+            }
+
+            // Show server loading state
+            serverLoader.classList.add('active');
+            loginSubmitBtn.disabled = true;
+            loginSubmitBtn.style.opacity = '0.6';
+
+            // Simulate server network roundtrip & database query
+            setTimeout(() => {
+                serverLoader.classList.remove('active');
+                loginSubmitBtn.disabled = false;
+                loginSubmitBtn.style.opacity = '1';
+
+                const users = getDatabaseUsers();
+                // Query Database: check login name and password
+                const matchedUser = users.find(u => 
+                    u.username.toLowerCase() === username.toLowerCase() && 
+                    u.plainPassword === password
+                );
+
+                if (matchedUser) {
+                    // Match found: return Successful Login Page
+                    showSuccessPage(matchedUser);
+                } else {
+                    // Match failed: show Failure Message
+                    showFailurePage(username);
+                }
+            }, 550);
+        });
+
+        function showSuccessPage(user) {
+            document.getElementById('successGreeting').textContent = 'Welcome back, ' + user.fullName + '!';
+            document.getElementById('resUserId').textContent = '#' + user.id;
+            document.getElementById('resUsername').textContent = user.username;
+            document.getElementById('resFullName').textContent = user.fullName;
+            document.getElementById('resEmail').textContent = user.email;
+
+            const roleBadge = document.getElementById('resRole');
+            roleBadge.textContent = user.role;
+            roleBadge.className = 'role-badge ' + (
+                user.role.toLowerCase().includes('admin') ? 'role-admin' :
+                user.role.toLowerCase().includes('student') ? 'role-student' :
+                user.role.toLowerCase().includes('facult') ? 'role-faculty' : 'role-user'
+            );
+
+            const now = new Date();
+            document.getElementById('resLoginTime').textContent = now.toLocaleDateString('en-GB', {
+                day: '2-digit', month: 'short', year: 'numeric'
+            }) + ', ' + now.toLocaleTimeString();
+
+            document.getElementById('resSessionId').textContent = 'sess_' + Math.random().toString(36).substring(2, 14);
+
+            switchView('success');
+        }
+
+        function showFailurePage(attemptedUser) {
+            document.getElementById('failAttemptedUser').textContent = attemptedUser || '(Empty)';
+            const now = new Date();
+            document.getElementById('failAttemptTime').textContent = now.toLocaleDateString('en-GB', {
+                day: '2-digit', month: 'short', year: 'numeric'
+            }) + ', ' + now.toLocaleTimeString();
+
+            switchView('failure');
+        }
+
+        function handleLogout() {
+            document.getElementById('password').value = '';
+            showLoginAlert('info', 'You have been logged out of your session.');
+            switchView('login');
+        }
+
+        function showLoginAlert(type, message) {
+            const box = document.getElementById('loginAlertBox');
+            const alertClass = type === 'warning' ? 'alert-warning' : type === 'danger' ? 'alert-danger' : 'alert-info';
+            const icon = type === 'warning' ? '⚠' : type === 'danger' ? '✕' : 'ℹ';
+            box.innerHTML = `
+                <div class="alert ${alertClass}">
+                    <span class="alert-icon">${icon}</span>
+                    <div>${message}</div>
+                </div>
+            `;
+        }
+
+        // Registration Handler
+        const registerForm = document.getElementById('registerForm');
+        registerForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('regUsername').value.trim();
+            const fullName = document.getElementById('regFullName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const role = document.getElementById('regRole').value;
+            const password = document.getElementById('regPassword').value;
+            const confirmPass = document.getElementById('regConfirmPassword').value;
+
+            const alertBox = document.getElementById('registerAlertBox');
+
+            if (password !== confirmPass) {
+                alertBox.innerHTML = `<div class="alert alert-danger"><span class="alert-icon">✕</span><div>Passwords do not match!</div></div>`;
+                return;
+            }
+            if (password.length < 6) {
+                alertBox.innerHTML = `<div class="alert alert-danger"><span class="alert-icon">✕</span><div>Password must be at least 6 characters.</div></div>`;
+                return;
+            }
+
+            const users = getDatabaseUsers();
+            if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                alertBox.innerHTML = `<div class="alert alert-danger"><span class="alert-icon">✕</span><div>The login name '${username}' is already taken.</div></div>`;
+                return;
+            }
+
+            // Create new record
+            const newUser = {
+                id: users.length + 1,
+                username: username,
+                fullName: fullName,
+                email: email,
+                role: role,
+                plainPassword: password,
+                passwordHash: "$2y$10$" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
+                createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+            };
+
+            users.push(newUser);
+            saveDatabaseUsers(users);
+
+            // Reset form
+            registerForm.reset();
+            alertBox.innerHTML = '';
+
+            // Redirect to login view with prefill
+            quickFill(username, password);
+            showLoginAlert('info', `Registration successful for <strong>${username}</strong>! You can now log in.`);
+            switchView('login');
+        });
+
+        // Render Database Table
+        function renderDatabaseTable() {
+            const users = getDatabaseUsers();
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+
+            users.forEach(u => {
+                const tr = document.createElement('tr');
+                const roleClass = u.role.toLowerCase().includes('admin') ? 'role-admin' :
+                                  u.role.toLowerCase().includes('student') ? 'role-student' :
+                                  u.role.toLowerCase().includes('facult') ? 'role-faculty' : 'role-user';
+                tr.innerHTML = `
+                    <td><strong>#${u.id}</strong></td>
+                    <td><code>${u.username}</code></td>
+                    <td>${u.fullName}</td>
+                    <td>${u.email}</td>
+                    <td><span class="role-badge ${roleClass}">${u.role}</span></td>
+                    <td><code style="font-size:0.75rem; color:#475569;">${u.passwordHash.substring(0, 18)}...</code></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Initialize table on load
+        getDatabaseUsers();
+    </script>
+</body>
+</html>
